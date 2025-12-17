@@ -73,6 +73,19 @@ fig = px.line(
     color="sensor_id",
     title="Sensor Values Over Time"
 )
+# Build y-axis label from units
+unit_map = (
+    plot_df.dropna(subset=["unit"])
+    .groupby("sensor_id")["unit"]
+    .first()
+    .to_dict()
+)
+
+if len(unit_map) == 1:
+    y_label = f"Value ({list(unit_map.values())[0]})"
+else:
+    y_label = "Value (sensor-specific units)"
+
 fig.update_layout(
     yaxis_title=y_label,
     xaxis_title="Time"
