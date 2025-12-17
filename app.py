@@ -61,72 +61,72 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "🤖 ML Predictions"
 ])
 with tab1:
+    with tab1:
     st.subheader("Live Sensor Monitoring")
     st.subheader("📊 Live Sensor Plots (per sensor)")
 
-sensor_list = sorted(filtered_df["sensor_id"].unique())
-selected_sensors = st.multiselect(
-    "Select sensors",
-    options=sensor_list,
-    default=sensor_list
-)
+    sensor_list = sorted(filtered_df["sensor_id"].unique())
+    selected_sensors = st.multiselect(
+        "Select sensors",
+        options=sensor_list,
+        default=sensor_list
+    )
 
-plot_df = filtered_df[filtered_df["sensor_id"].isin(selected_sensors)].copy()
+    plot_df = filtered_df[filtered_df["sensor_id"].isin(selected_sensors)].copy()
 
-# Create rows of 2 columns
-for i in range(0, len(selected_sensors), 2):
-    cols = st.columns(2)
+    # Create rows of 2 columns
+    for i in range(0, len(selected_sensors), 2):
+        cols = st.columns(2)
 
-    for col_idx, sid in enumerate(selected_sensors[i:i+2]):
-        with cols[col_idx]:
-            s_df = plot_df[plot_df["sensor_id"] == sid].sort_values("timestamp")
+        for col_idx, sid in enumerate(selected_sensors[i:i+2]):
+            with cols[col_idx]:
+                s_df = plot_df[plot_df["sensor_id"] == sid].sort_values("timestamp")
 
-            unit = ""
-            if "unit" in s_df.columns and s_df["unit"].notna().any():
-                unit = str(s_df["unit"].dropna().iloc[0])
+                unit = ""
+                if "unit" in s_df.columns and s_df["unit"].notna().any():
+                    unit = str(s_df["unit"].dropna().iloc[0])
 
-            fig = go.Figure()
+                fig = go.Figure()
 
-            # Sensor line
-            fig.add_trace(
-                go.Scatter(
-                    x=s_df["timestamp"],
-                    y=s_df["value"],
-                    mode="lines",
-                    name=sid
-                )
-            )
-
-            # Threshold line
-            if "rule_threshold" in s_df.columns and s_df["rule_threshold"].notna().any():
-                thr = float(s_df["rule_threshold"].dropna().iloc[0])
-                fig.add_hline(y=thr, line_dash="dash", annotation_text="Threshold")
-
-            # Anomaly points
-            if "anomaly" in s_df.columns:
-                a_df = s_df[s_df["anomaly"] == 1]
-                if not a_df.empty:
-                    fig.add_trace(
-                        go.Scatter(
-                            x=a_df["timestamp"],
-                            y=a_df["value"],
-                            mode="markers",
-                            name="Anomalies",
-                            marker_symbol="x",
-                            marker_size=10
-                        )
+                fig.add_trace(
+                    go.Scatter(
+                        x=s_df["timestamp"],
+                        y=s_df["value"],
+                        mode="lines",
+                        name=sid
                     )
+                )
 
-            fig.update_layout(
-                title=f"Sensor {sid}",
-                xaxis_title="Time",
-                yaxis_title=f"Value ({unit})" if unit else "Value",
-                height=350,
-                showlegend=False
-            )
+                if "rule_threshold" in s_df.columns and s_df["rule_threshold"].notna().any():
+                    thr = float(s_df["rule_threshold"].dropna().iloc[0])
+                    fig.add_hline(y=thr, line_dash="dash", annotation_text="Threshold")
 
-            st.plotly_chart(fig, use_container_width=True)
+                if "anomaly" in s_df.columns:
+                    a_df = s_df[s_df["anomaly"] == 1]
+                    if not a_df.empty:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=a_df["timestamp"],
+                                y=a_df["value"],
+                                mode="markers",
+                                name="Anomalies",
+                                marker_symbol="x",
+                                marker_size=10
+                            )
+                        )
 
+                fig.update_layout(
+                    title=f"Sensor {sid}",
+                    xaxis_title="Time",
+                    yaxis_title=f"Value ({unit})" if unit else "Value",
+                    height=350,
+                    showlegend=False
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+# ---------------- Display ----------------
+    st.subheader(f"Sensor Data — {selected_bridge}")
+    st.dataframe(filtered_df, use_container_width=True)
 with tab2:
     st.subheader("Alerts")
     st.info("Alerts logic will go here")
@@ -139,6 +139,3 @@ with tab4:
     st.subheader("ML Predictions")
     st.info("ML predictions will go here")
 
-# ---------------- Display ----------------
-st.subheader(f"Sensor Data — {selected_bridge}")
-st.dataframe(filtered_df, use_container_width=True)
