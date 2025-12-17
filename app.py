@@ -62,21 +62,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 with tab1:
     st.subheader("Live Sensor Monitoring")
-    # (we will put per-sensor plots here)
-
-with tab2:
-    st.subheader("Alerts")
-    st.info("Alerts logic will go here")
-
-with tab3:
-    st.subheader("Historical Analysis")
-    st.info("Historical plots will go here")
-
-with tab4:
-    st.subheader("ML Predictions")
-    st.info("ML predictions will go here")
-
-st.subheader("📊 Live Sensor Plots (per sensor)")
+    st.subheader("📊 Live Sensor Plots (per sensor)")
 
 sensor_list = sorted(filtered_df["sensor_id"].unique())
 selected_sensors = st.multiselect(
@@ -140,6 +126,18 @@ for i in range(0, len(selected_sensors), 2):
             )
 
             st.plotly_chart(fig, use_container_width=True)
+
+with tab2:
+    st.subheader("Alerts")
+    st.info("Alerts logic will go here")
+
+with tab3:
+    st.subheader("Historical Analysis")
+    st.info("Historical plots will go here")
+
+with tab4:
+    st.subheader("ML Predictions")
+    st.info("ML predictions will go here")
 
 # ---------------- Display ----------------
 st.subheader(f"Sensor Data — {selected_bridge}")
