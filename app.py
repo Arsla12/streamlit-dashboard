@@ -54,6 +54,28 @@ filtered_df = df[
     (df["timestamp"] >= start_time) &
     (df["timestamp"] <= end_time)
 ]
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📊 Live Monitoring",
+    "🚨 Alerts",
+    "📈 Historical Analysis",
+    "🤖 ML Predictions"
+])
+with tab1:
+    st.subheader("Live Sensor Monitoring")
+    # (we will put per-sensor plots here)
+
+with tab2:
+    st.subheader("Alerts")
+    st.info("Alerts logic will go here")
+
+with tab3:
+    st.subheader("Historical Analysis")
+    st.info("Historical plots will go here")
+
+with tab4:
+    st.subheader("ML Predictions")
+    st.info("ML predictions will go here")
+
 st.subheader("📊 Live Sensor Plots (per sensor)")
 
 sensor_list = sorted(filtered_df["sensor_id"].unique())
