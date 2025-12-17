@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 # ---------------- Page config ----------------
 st.set_page_config(
@@ -53,9 +54,8 @@ filtered_df = df[
     (df["timestamp"] >= start_time) &
     (df["timestamp"] <= end_time)
 ]
-st.subheader("📊 Live Sensor Plots")
+st.subheader("📊 Live Sensor Plots (per sensor)")
 
-# Choose which sensors to show
 sensor_list = sorted(filtered_df["sensor_id"].unique())
 selected_sensors = st.multiselect(
     "Select sensors",
@@ -65,70 +65,59 @@ selected_sensors = st.multiselect(
 
 plot_df = filtered_df[filtered_df["sensor_id"].isin(selected_sensors)].copy()
 
-# Line chart (one line per sensor)
-fig = px.line(
-    plot_df,
-    x="timestamp",
-    y="value",
-    color="sensor_id",
-    title="Sensor Values Over Time"
-)
-# Build y-axis label from units
-unit_map = (
-    plot_df.dropna(subset=["unit"])
-    .groupby("sensor_id")["unit"]
-    .first()
-    .to_dict()
-)
+# Create rows of 2 columns
+for i in range(0, len(selected_sensors), 2):
+    cols = st.columns(2)
 
-if len(unit_map) == 1:
-    y_label = f"Value ({list(unit_map.values())[0]})"
-else:
-    y_label = "Value (sensor-specific units)"
+    for col_idx, sid in enumerate(selected_sensors[i:i+2]):
+        with cols[col_idx]:
+            s_df = plot_df[plot_df["sensor_id"] == sid].sort_values("timestamp")
 
-fig.update_layout(
-    yaxis_title=y_label,
-    xaxis_title="Time"
-)
+            unit = ""
+            if "unit" in s_df.columns and s_df["unit"].notna().any():
+                unit = str(s_df["unit"].dropna().iloc[0])
 
-# Add threshold lines per sensor (if rule_threshold exists and is not null)
-if "rule_threshold" in plot_df.columns:
-    thresholds = (
-        plot_df.dropna(subset=["rule_threshold"])
-        .groupby("sensor_id")["rule_threshold"]
-        .first()
-        .to_dict()
-    )
-    for sid, thr in thresholds.items():
-        fig.add_hline(y=float(thr), line_dash="dash", annotation_text=f"{sid} threshold")
+            fig = go.Figure()
 
-# Highlight anomalies (if anomaly column exists)
-if "anomaly" in plot_df.columns:
-    anomaly_points = plot_df[plot_df["anomaly"] == 1]
-    if not anomaly_points.empty:
-        fig.add_scatter(
-            x=anomaly_points["timestamp"],
-            y=anomaly_points["value"],
-            mode="markers",
-            name="Anomalies",
-            marker_symbol="x",
-            marker_size=10
-        )
-# Get unit labels per sensor
-unit_map = (
-    plot_df.dropna(subset=["unit"])
-    .groupby("sensor_id")["unit"]
-    .first()
-    .to_dict()
-)
+            # Sensor line
+            fig.add_trace(
+                go.Scatter(
+                    x=s_df["timestamp"],
+                    y=s_df["value"],
+                    mode="lines",
+                    name=sid
+                )
+            )
 
-# If multiple sensors selected, show combined label
-if len(unit_map) == 1:
-    y_label = f"Value ({list(unit_map.values())[0]})"
-else:
-    y_label = "Value (sensor-specific units)"
+            # Threshold line
+            if "rule_threshold" in s_df.columns and s_df["rule_threshold"].notna().any():
+                thr = float(s_df["rule_threshold"].dropna().iloc[0])
+                fig.add_hline(y=thr, line_dash="dash", annotation_text="Threshold")
 
-st.plotly_chart(fig, use_container_width=True)
+            # Anomaly points
+            if "anomaly" in s_df.columns:
+                a_df = s_df[s_df["anomaly"] == 1]
+                if not a_df.empty:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=a_df["timestamp"],
+                            y=a_df["value"],
+                            mode="markers",
+                            name="Anomalies",
+                            marker_symbol="x",
+                            marker_size=10
+                        )
+                    )
+
+            fig.update_layout(
+                title=f"Sensor {sid}",
+                xaxis_title="Time",
+                yaxis_title=f"Value ({unit})" if unit else "Value",
+                height=350,
+                showlegend=False
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
 
 # ---------------- Display ----------------
 st.subheader(f"Sensor Data — {selected_bridge}")
