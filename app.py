@@ -73,6 +73,10 @@ fig = px.line(
     color="sensor_id",
     title="Sensor Values Over Time"
 )
+fig.update_layout(
+    yaxis_title=y_label,
+    xaxis_title="Time"
+)
 
 # Add threshold lines per sensor (if rule_threshold exists and is not null)
 if "rule_threshold" in plot_df.columns:
@@ -97,6 +101,19 @@ if "anomaly" in plot_df.columns:
             marker_symbol="x",
             marker_size=10
         )
+# Get unit labels per sensor
+unit_map = (
+    plot_df.dropna(subset=["unit"])
+    .groupby("sensor_id")["unit"]
+    .first()
+    .to_dict()
+)
+
+# If multiple sensors selected, show combined label
+if len(unit_map) == 1:
+    y_label = f"Value ({list(unit_map.values())[0]})"
+else:
+    y_label = "Value (sensor-specific units)"
 
 st.plotly_chart(fig, use_container_width=True)
 
