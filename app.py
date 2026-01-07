@@ -203,8 +203,12 @@ with tab3:
     st.subheader("Historical Analysis")
     sensor_ids = sorted(filtered_df["sensor_id"].unique())
     selected_sensor = st.selectbox("Select sensor", sensor_ids)
+    show_anomalies_only = st.checkbox("Show anomalies only", value=False)
 
     s_df = filtered_df[filtered_df["sensor_id"] == selected_sensor].sort_values("timestamp")
+
+    if show_anomalies_only and "anomaly" in s_df.columns:
+    s_df = s_df[s_df["anomaly"] == 1]
 
     unit = ""
     if "unit" in s_df.columns and s_df["unit"].notna().any():
@@ -221,6 +225,9 @@ with tab3:
     # Anomalies
     if "anomaly" in s_df.columns:
         a_df = s_df[s_df["anomaly"] == 1]
+        if s_df.empty:
+    st.warning("No data available for this selection.")
+    st.stop()
         if not a_df.empty:
             fig.add_trace(
                 go.Scatter(
@@ -242,6 +249,25 @@ with tab3:
     )
 
     st.plotly_chart(fig, use_container_width=True)
+    st.subheader("Value Distribution")
+
+hist = go.Figure()
+hist.add_trace(
+    go.Histogram(
+        x=s_df["value"],
+        nbinsx=30
+    )
+)
+
+hist.update_layout(
+    title="Histogram of Sensor Values",
+    xaxis_title=f"Value ({unit})" if unit else "Value",
+    yaxis_title="Count",
+    height=350,
+    showlegend=False
+)
+
+st.plotly_chart(hist, use_container_width=True)
 
     # Stats
     c1, c2, c3, c4 = st.columns(4)
