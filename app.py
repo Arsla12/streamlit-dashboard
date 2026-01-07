@@ -225,7 +225,7 @@ with tab3:
     # Anomalies
     if "anomaly" in s_df.columns:
         a_df = s_df[s_df["anomaly"] == 1]
-        if s_df.empty:
+         if s_df.empty:
     st.warning("No data available for this selection.")
     st.stop()
         if not a_df.empty:
