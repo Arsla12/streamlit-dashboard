@@ -201,33 +201,46 @@ with tab2:
 
 with tab3:
     st.subheader("Historical Analysis")
+
     sensor_ids = sorted(filtered_df["sensor_id"].unique())
     selected_sensor = st.selectbox("Select sensor", sensor_ids)
+
     show_anomalies_only = st.checkbox("Show anomalies only", value=False)
 
-    s_df = filtered_df[filtered_df["sensor_id"] == selected_sensor].sort_values("timestamp")
+    s_df = (
+        filtered_df[filtered_df["sensor_id"] == selected_sensor]
+        .sort_values("timestamp")
+    )
 
     if show_anomalies_only and "anomaly" in s_df.columns:
-    s_df = s_df[s_df["anomaly"] == 1]
-    if s_df.empty:
-    st.warning("No data available for this selection.")
-    st.stop()
+        s_df = s_df[s_df["anomaly"] == 1]
 
+    if s_df.empty:
+        st.warning("No data available for this selection.")
+        st.stop()
+
+    # ----- Unit detection -----
     unit = ""
     if "unit" in s_df.columns and s_df["unit"].notna().any():
         unit = str(s_df["unit"].dropna().iloc[0])
 
+    # ----- Time series plot -----
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=s_df["timestamp"], y=s_df["value"], mode="lines", name="Value"))
+    fig.add_trace(
+        go.Scatter(
+            x=s_df["timestamp"],
+            y=s_df["value"],
+            mode="lines",
+            name="Value"
+        )
+    )
 
-    # Threshold
     if "rule_threshold" in s_df.columns and s_df["rule_threshold"].notna().any():
         thr = float(s_df["rule_threshold"].dropna().iloc[0])
         fig.add_hline(y=thr, line_dash="dash", annotation_text="Threshold")
 
-    # Anomalies
     if "anomaly" in s_df.columns:
-    a_df = s_df[s_df["anomaly"] == 1]
+        a_df = s_df[s_df["anomaly"] == 1]
         if not a_df.empty:
             fig.add_trace(
                 go.Scatter(
@@ -249,27 +262,23 @@ with tab3:
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+    # ----- Distribution (Histogram) -----
     st.subheader("Value Distribution")
 
-hist = go.Figure()
-hist.add_trace(
-    go.Histogram(
-        x=s_df["value"],
-        nbinsx=30
+    hist = go.Figure()
+    hist.add_trace(go.Histogram(x=s_df["value"], nbinsx=30))
+
+    hist.update_layout(
+        xaxis_title=f"Value ({unit})" if unit else "Value",
+        yaxis_title="Count",
+        height=350,
+        showlegend=False
     )
-)
 
-hist.update_layout(
-    title="Histogram of Sensor Values",
-    xaxis_title=f"Value ({unit})" if unit else "Value",
-    yaxis_title="Count",
-    height=350,
-    showlegend=False
-)
+    st.plotly_chart(hist, use_container_width=True)
 
-st.plotly_chart(hist, use_container_width=True)
-
-    # Stats
+    # ----- Statistics -----
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Mean", f"{s_df['value'].mean():.2f}")
     c2.metric("Std", f"{s_df['value'].std():.2f}")
