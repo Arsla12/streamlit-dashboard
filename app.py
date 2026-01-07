@@ -128,7 +128,7 @@ with tab1:
     st.dataframe(filtered_df, use_container_width=True)
 with tab2:
     st.subheader("Alerts")
-       alerts_df = filtered_df.copy()
+    alerts_df = filtered_df.copy()
     total_points = len(alerts_df)
 
     if "anomaly" in alerts_df.columns and total_points > 0:
