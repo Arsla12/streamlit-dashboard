@@ -39,9 +39,9 @@ max_minutes = int((end_time_all - start_time_all).total_seconds() // 60)
 
 time_range = st.sidebar.slider(
     "Time Range (minutes from start)",
-    min_value=0,
+    min_value=1,
     max_value=max_minutes,
-    value=(0, min(30, max_minutes)),
+    value=(1, min(30, max_minutes)),
     step=1
 )
 
@@ -190,7 +190,54 @@ with tab2:
 
 with tab3:
     st.subheader("Historical Analysis")
-    st.info("Historical plots will go here")
+    sensor_ids = sorted(filtered_df["sensor_id"].unique())
+    selected_sensor = st.selectbox("Select sensor", sensor_ids)
+
+    s_df = filtered_df[filtered_df["sensor_id"] == selected_sensor].sort_values("timestamp")
+
+    unit = ""
+    if "unit" in s_df.columns and s_df["unit"].notna().any():
+        unit = str(s_df["unit"].dropna().iloc[0])
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=s_df["timestamp"], y=s_df["value"], mode="lines", name="Value"))
+
+    # Threshold
+    if "rule_threshold" in s_df.columns and s_df["rule_threshold"].notna().any():
+        thr = float(s_df["rule_threshold"].dropna().iloc[0])
+        fig.add_hline(y=thr, line_dash="dash", annotation_text="Threshold")
+
+    # Anomalies
+    if "anomaly" in s_df.columns:
+        a_df = s_df[s_df["anomaly"] == 1]
+        if not a_df.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=a_df["timestamp"],
+                    y=a_df["value"],
+                    mode="markers",
+                    name="Anomalies",
+                    marker_symbol="x",
+                    marker_size=10
+                )
+            )
+
+    fig.update_layout(
+        title=f"Sensor {selected_sensor} — Historical Trend",
+        xaxis_title="Time",
+        yaxis_title=f"Value ({unit})" if unit else "Value",
+        height=450,
+        showlegend=False
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Stats
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Mean", f"{s_df['value'].mean():.2f}")
+    c2.metric("Std", f"{s_df['value'].std():.2f}")
+    c3.metric("Min", f"{s_df['value'].min():.2f}")
+    c4.metric("Max", f"{s_df['value'].max():.2f}")
 
 with tab4:
     st.subheader("ML Predictions")
