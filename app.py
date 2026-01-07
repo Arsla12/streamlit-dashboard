@@ -128,65 +128,76 @@ with tab1:
     st.dataframe(filtered_df, use_container_width=True)
 with tab2:
     st.subheader("Alerts")
-        # Work only on the currently filtered data
-    alerts_df = filtered_df.copy()
-
-    # If your anomaly column is 0/1, this will work directly
-    # If it's True/False, it also works
+       alerts_df = filtered_df.copy()
     total_points = len(alerts_df)
 
     if "anomaly" in alerts_df.columns and total_points > 0:
         anomaly_points = int((alerts_df["anomaly"] == 1).sum())
-
-        # Use rule_threshold if available to estimate severity
-        if "rule_threshold" in alerts_df.columns and alerts_df["rule_threshold"].notna().any():
-            alerts_df["threshold_ok"] = alerts_df["rule_threshold"].notna()
-
-            # Calculate exceed ratio only where threshold exists and is > 0
-            valid_thr = alerts_df["threshold_ok"] & (alerts_df["rule_threshold"] > 0)
-            alerts_df.loc[valid_thr, "exceed_ratio"] = (
-                (alerts_df.loc[valid_thr, "value"] - alerts_df.loc[valid_thr, "rule_threshold"])
-                / alerts_df.loc[valid_thr, "rule_threshold"]
-            )
-
-            # Severity rule:
-            # - Critical: value > threshold AND exceed_ratio > 0.5
-            # - Warning: value > threshold (but not critical)
-            critical = alerts_df[valid_thr & (alerts_df["value"] > alerts_df["rule_threshold"]) & (alerts_df["exceed_ratio"] > 0.5)]
-            warning = alerts_df[valid_thr & (alerts_df["value"] > alerts_df["rule_threshold"]) & ~(alerts_df["exceed_ratio"] > 0.5)]
-
-            critical_count = len(critical)
-            warning_count = len(warning)
-        else:
-            critical_count = 0
-            warning_count = 0
-
         normal_points = total_points - anomaly_points
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total Data Points", total_points)
-        c2.metric("Anomaly Points", anomaly_points)
-        c3.metric("Normal Points", normal_points)
+        # ---------- TOP ROW: OVERVIEW ----------
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Data Points", total_points)
+        col2.metric("Normal Points", normal_points)
+        col3.metric("Anomaly Points", anomaly_points)
 
-        c4, c5 = st.columns(2)
-        c4.metric("Critical (threshold > 50%)", critical_count)
-        c5.metric("Warning (threshold exceeded)", warning_count)
+        st.markdown("---")
 
-        # Recent alerts table (last 50 anomaly rows)
+        # ---------- SEVERITY CALCULATION ----------
+        critical_count = 0
+        warning_count = 0
+
+        if "rule_threshold" in alerts_df.columns and alerts_df["rule_threshold"].notna().any():
+            valid_thr = alerts_df["rule_threshold"] > 0
+            alerts_df = alerts_df[valid_thr].copy()
+
+            alerts_df["exceed_ratio"] = (
+                (alerts_df["value"] - alerts_df["rule_threshold"])
+                / alerts_df["rule_threshold"]
+            )
+
+            critical_count = len(
+                alerts_df[(alerts_df["value"] > alerts_df["rule_threshold"]) &
+                          (alerts_df["exceed_ratio"] > 0.5)]
+            )
+
+            warning_count = len(
+                alerts_df[(alerts_df["value"] > alerts_df["rule_threshold"]) &
+                          (alerts_df["exceed_ratio"] <= 0.5)]
+            )
+
+        # ---------- SECOND ROW: SEVERITY ----------
+        st.subheader("Alert Severity")
+
+        col4, col5 = st.columns(2)
+        col4.metric("🔴 Critical Alerts", critical_count)
+        col5.metric("🟠 Warning Alerts", warning_count)
+
+        st.markdown("---")
+
+        # ---------- DETAILS TABLE ----------
         if anomaly_points > 0:
             st.subheader("Recent Anomalies")
-            recent = alerts_df[alerts_df["anomaly"] == 1].sort_values("timestamp").tail(50)
 
-            show_cols = [c for c in [
-                "timestamp", "bridge_id", "span_id", "sensor_id", "sensor_type",
-                "value", "unit", "rule_threshold", "anomaly_type", "traffic_load_proxy"
-            ] if c in recent.columns]
+            recent = (
+                filtered_df[filtered_df["anomaly"] == 1]
+                .sort_values("timestamp")
+                .tail(50)
+            )
+
+            show_cols = [
+                c for c in [
+                    "timestamp", "sensor_id", "value", "unit",
+                    "rule_threshold", "anomaly_type"
+                ] if c in recent.columns
+            ]
 
             st.dataframe(recent[show_cols], use_container_width=True)
         else:
-            st.info("No anomalies found in the selected bridge and time range.")
+            st.success("No anomalies detected in the selected time range.")
+
     else:
-        st.warning("No 'anomaly' column found in the dataset, so alerts cannot be summarized.")
+        st.warning("No anomaly information available in the dataset.")
 
 with tab3:
     st.subheader("Historical Analysis")
