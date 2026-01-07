@@ -35,7 +35,7 @@ selected_bridge = st.sidebar.selectbox(
 
 start_time_all = df["timestamp"].min()
 end_time_all = df["timestamp"].max()
-max_minutes = int((end_time_all - start_time_all).total_seconds() // 60)
+max_minutes = int((end_time_all - start_time_all).total_seconds() // 60) + 1
 
 time_range = st.sidebar.slider(
     "Time Range (minutes from start)",
