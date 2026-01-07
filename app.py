@@ -209,6 +209,9 @@ with tab3:
 
     if show_anomalies_only and "anomaly" in s_df.columns:
     s_df = s_df[s_df["anomaly"] == 1]
+    if s_df.empty:
+    st.warning("No data available for this selection.")
+    st.stop()
 
     unit = ""
     if "unit" in s_df.columns and s_df["unit"].notna().any():
@@ -224,10 +227,7 @@ with tab3:
 
     # Anomalies
     if "anomaly" in s_df.columns:
-        a_df = s_df[s_df["anomaly"] == 1]
-         if s_df.empty:
-    st.warning("No data available for this selection.")
-    st.stop()
+    a_df = s_df[s_df["anomaly"] == 1]
         if not a_df.empty:
             fig.add_trace(
                 go.Scatter(
