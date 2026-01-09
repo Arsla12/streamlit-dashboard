@@ -123,9 +123,7 @@ with tab1:
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
-# ---------------- Display ----------------
-    st.subheader(f"Sensor Data — {selected_bridge}")
-    st.dataframe(filtered_df, use_container_width=True)
+
 with tab2:
     st.subheader("Alerts")
     alerts_df = filtered_df.copy()
