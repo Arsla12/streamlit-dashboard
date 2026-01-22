@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import numpy as np
 
 # ---------------- Page config ----------------
 st.set_page_config(
@@ -285,5 +286,245 @@ with tab3:
 
 with tab4:
     st.subheader("ML Predictions")
-    st.info("ML predictions will go here")
+
+    # ---------------- Imports (local) ----------------
+    from ml.ml_scoring import MLScorer, get_risk_emoji
+
+    # ---------------- Safety checks ----------------
+    required_cols = {"sensor_id", "span_id", "sensor_type", "value", "timestamp"}
+    missing = required_cols - set(filtered_df.columns)
+    if missing:
+        st.error(f"Missing required columns in dataset: {sorted(missing)}")
+        st.stop()
+
+    # ---------------- Controls ----------------
+    cA, cB, cC, cD = st.columns([2, 2, 2, 2])
+    with cA:
+        selected_span = st.selectbox("Span", ["All"] + sorted(filtered_df["span_id"].unique()))
+    with cB:
+        window_size = st.slider("Window size (latest N points per sensor)", 20, 300, 50, 10)
+    with cC:
+        combine_rule = st.selectbox("Combine rule", ["Worst-case (max)", "Average (mean)"])
+    with cD:
+        show_only_flagged = st.checkbox("Show only flagged sensors", value=False)
+
+    view_df = filtered_df.copy()
+    if selected_span != "All":
+        view_df = view_df[view_df["span_id"] == selected_span].copy()
+
+    if view_df.empty:
+        st.warning("No data for this selection.")
+        st.stop()
+
+    # ---------------- Helper functions ----------------
+    def risk01_from_iforest(score: float, threshold: float | None) -> float:
+        """
+        IsolationForest decision_function: higher = more normal.
+        Convert to risk [0,1] based on distance below threshold.
+        """
+        if threshold is None:
+            return 0.0
+        if score >= threshold:
+            return 0.0
+        dist = threshold - score
+        return float(np.clip(dist / 0.2, 0.0, 1.0))  # 0.2 scaling is a practical default
+
+    def risk_level_from_risk01(r: float) -> str:
+        if r >= 0.85: return "critical"
+        if r >= 0.65: return "high"
+        if r >= 0.40: return "medium"
+        return "low"
+
+    def combine_risk(scores: pd.Series) -> float:
+        scores = scores.dropna()
+        if scores.empty:
+            return float("nan")
+        if combine_rule.startswith("Worst"):
+            return float(scores.max())
+        return float(scores.mean())
+
+    # ---------------- Load scorers (cached) ----------------
+    @st.cache_resource
+    def get_if_scorer():
+        return MLScorer(artifact_dir="ml_artifacts")
+
+    if_scorer = get_if_scorer()
+
+    # ---------------- Score per sensor (routes by sensor_type) ----------------
+    per_sensor_rows = []
+
+    grouped = view_df.sort_values("timestamp").groupby(["sensor_id", "span_id", "sensor_type"], as_index=False)
+
+    for (sensor_id, span_id, sensor_type), g in grouped:
+        if len(g) < window_size:
+            continue
+        recent = g.tail(window_size)
+
+        # ---- 1) Strain gauge -> Isolation Forest (works now) ----
+        if sensor_type == "strain_gauge":
+            out = if_scorer.compute_risk_score(recent, span_id, sensor_type)
+            raw = float(out.get("risk_score", np.nan))
+            thr = out.get("threshold", None)
+            has_model = bool(out.get("has_model", False))
+            anomaly = bool(out.get("anomaly_detected", False))
+
+            risk01 = risk01_from_iforest(raw, thr) if has_model else np.nan
+            level = risk_level_from_risk01(risk01) if has_model else "unknown"
+
+            per_sensor_rows.append({
+                "sensor_id": sensor_id,
+                "span_id": span_id,
+                "sensor_type": sensor_type,
+                "model_used": "Isolation Forest",
+                "raw_score": raw,
+                "threshold": thr,
+                "risk_0_1": risk01,
+                "risk_level": level,
+                "flag": anomaly,
+                "has_model": has_model
+            })
+
+        # ---- 2) Accelerometer -> CNN Autoencoder (placeholder until you wire cnn_scoring.py) ----
+        elif sensor_type == "accelerometer_rms":
+            # Professional: show it's part of your pipeline even if not wired yet
+            per_sensor_rows.append({
+                "sensor_id": sensor_id,
+                "span_id": span_id,
+                "sensor_type": sensor_type,
+                "model_used": "1D CNN Autoencoder",
+                "raw_score": np.nan,
+                "threshold": np.nan,
+                "risk_0_1": np.nan,
+                "risk_level": "unwired",
+                "flag": False,
+                "has_model": False
+            })
+
+        else:
+            per_sensor_rows.append({
+                "sensor_id": sensor_id,
+                "span_id": span_id,
+                "sensor_type": sensor_type,
+                "model_used": "Unknown",
+                "raw_score": np.nan,
+                "threshold": np.nan,
+                "risk_0_1": np.nan,
+                "risk_level": "unknown",
+                "flag": False,
+                "has_model": False
+            })
+
+    scores_df = pd.DataFrame(per_sensor_rows)
+
+    if scores_df.empty:
+        st.warning("No sensors scored. Expand the time range or reduce the window size.")
+        st.stop()
+
+    # Optional filter
+    if show_only_flagged:
+        scores_df = scores_df[scores_df["flag"] == True].copy()
+
+    # ---------------- Combined view (span + bridge) ----------------
+    span_combined = (
+        scores_df.groupby("span_id", as_index=False)["risk_0_1"]
+        .apply(lambda s: combine_risk(s))
+        .rename(columns={"risk_0_1": "combined_risk_0_1"})
+    )
+
+    bridge_combined = combine_risk(scores_df["risk_0_1"])
+
+    # ---------------- TOP: Executive summary cards ----------------
+    # Unified CNN + Predictive CNN placeholders (until you wire them)
+    unified_prob = np.nan   # later: fill from your unified CNN output
+    forecast_risk = np.nan  # later: fill from predictive CNN output
+
+    left, mid, right, far = st.columns(4)
+    left.metric("Bridge combined risk (0–1)", "N/A" if np.isnan(bridge_combined) else f"{bridge_combined:.2f}")
+    mid.metric("Sensors scored", len(scores_df))
+    right.metric("Sensors flagged", int(scores_df["flag"].sum()))
+    far.metric("Unified CNN anomaly prob", "Not wired" if np.isnan(unified_prob) else f"{unified_prob:.2f}")
+
+    st.markdown("---")
+
+    # ---------------- MIDDLE: Timeline chart (clean + professional) ----------------
+    st.markdown("### Timeline")
+    col1, col2 = st.columns([2, 1])
+
+    with col2:
+        sensor_choices = sorted(view_df["sensor_id"].unique())
+        chart_sensor = st.selectbox("Sensor to plot", sensor_choices)
+
+        show_model_overlay = st.checkbox("Overlay normalized risk (if available)", value=True)
+
+    plot_df = view_df[view_df["sensor_id"] == chart_sensor].sort_values("timestamp").copy()
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=plot_df["timestamp"], y=plot_df["value"], mode="lines", name="Sensor value"
+    ))
+
+    # Overlay risk_0_1 as a second y-axis (if we have it for that sensor)
+    if show_model_overlay:
+        r = scores_df[scores_df["sensor_id"] == chart_sensor]
+        if not r.empty and pd.notna(r["risk_0_1"].iloc[0]):
+            # flat line over time window (because we score per window)
+            risk_val = float(r["risk_0_1"].iloc[0])
+            fig.add_trace(go.Scatter(
+                x=plot_df["timestamp"],
+                y=[risk_val] * len(plot_df),
+                mode="lines",
+                name="Risk (0–1)",
+                yaxis="y2"
+            ))
+            fig.update_layout(
+                yaxis2=dict(
+                    title="Risk (0–1)",
+                    overlaying="y",
+                    side="right",
+                    range=[0, 1]
+                )
+            )
+
+    fig.update_layout(
+        height=450,
+        xaxis_title="Time",
+        yaxis_title="Value",
+        legend=dict(orientation="h")
+    )
+    with col1:
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("---")
+
+    # ---------------- BOTTOM: Model breakdown table ----------------
+    st.markdown("### Model Breakdown (Per Sensor)")
+
+    scores_df["status"] = scores_df["risk_level"].apply(get_risk_emoji) + " " + scores_df["risk_level"]
+
+    st.dataframe(
+        scores_df[
+            ["span_id", "sensor_id", "sensor_type", "model_used", "raw_score", "threshold",
+             "risk_0_1", "status", "flag", "has_model"]
+        ].sort_values(["flag", "risk_0_1"], ascending=[False, False]),
+        use_container_width=True
+    )
+
+    st.markdown("### Combined by Span")
+    st.dataframe(
+        span_combined.sort_values("combined_risk_0_1", ascending=False),
+        use_container_width=True
+    )
+
+    # ---------------- Model details (professional, minimal) ----------------
+    with st.expander("Model Details"):
+        st.markdown(
+            """
+            **Models used**
+            - **Isolation Forest (Unsupervised)** — Strain gauge sensors → anomaly score (lower = more anomalous)
+            - **1D CNN Autoencoder (Unsupervised)** — Accelerometer sensors → reconstruction error (higher = anomaly)
+            - **Unified 1D CNN (Supervised)** — all sensors → anomaly probability [0,1]
+            - **Predictive 1D CNN (Supervised)** — all sensors → future anomaly risk (0–100%)
+            """
+        )
+
 
